@@ -1,5 +1,6 @@
 package com.example.backend.jwtUtility;
 
+import com.example.backend.dto.UserDto;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -13,6 +14,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+import static java.time.temporal.ChronoUnit.DAYS;
 import static java.time.temporal.ChronoUnit.SECONDS;
 
 
@@ -35,9 +37,9 @@ public class JwtUtil {
     public String issueToken(String subject, String... scoops) {
         return issueTokens(subject, Map.of("scoops", scoops));
     }
-//    public String generateToken(UserDto userDto, List<String> roles) {
-//        return issueTokens(userDto.getEmail(), Map.of("roles", roles));
-//    }
+    public String generateToken(UserDto userDto, List<String> roles) {
+        return issueTokens(userDto.getEmail(), Map.of("roles", roles));
+    }
 
     private String issueTokens(String subject, Map<String, Object> claims) {
         System.out.println("subject: → " + subject); // subject: → admin
@@ -46,7 +48,7 @@ public class JwtUtil {
                 .setClaims(claims)
                 .setSubject(subject)
                 .setIssuedAt(Date.from(Instant.now()))
-                .setExpiration(Date.from(Instant.now().plus(5, SECONDS)))
+                .setExpiration(Date.from(Instant.now().plus(3, DAYS)))
                 .signWith(getKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -79,16 +81,17 @@ private Key getKey() {
 //    Validates the token and checks if the subject matches the username in the UserDetails object.
     public boolean validateToken(String token, UserDetails userDetails) {
         String username = getSubject(token);
-        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+        return username.equals(userDetails.getUsername()) && isTokenExpired(token);
+    }
+
+    public boolean validateToken(String token) {
+        return isTokenExpired(token);
     }
 
 
 //    Checks if the token is expired.
     private boolean isTokenExpired(String token) {
-      return getClaims(token).getExpiration().before(Date.from(Instant.now()));
+      return !getClaims(token).getExpiration().before(Date.from(Instant.now()));
 
     }
-
-
-
 }

@@ -1,23 +1,23 @@
 package com.example.backend.service;
 
 
-import com.example.individuelluppgiftspringboot.dao.RoleRepository;
-import com.example.individuelluppgiftspringboot.dao.UserRepository;
-import com.example.individuelluppgiftspringboot.dto.userdto.UserDto;
-import com.example.individuelluppgiftspringboot.dto.userdto.UserRegistrationDTO;
-import com.example.individuelluppgiftspringboot.entities.Role;
-import com.example.individuelluppgiftspringboot.entities.User;
-import com.example.individuelluppgiftspringboot.exception.ExistsEmailException;
-import com.example.individuelluppgiftspringboot.exception.HandleMethodArgumentNotValid;
-import com.example.individuelluppgiftspringboot.exception.ResourceNotFoundException;
-import com.example.individuelluppgiftspringboot.mapper.UserDTOMapper;
-import jakarta.validation.Valid;
+import com.example.backend.dao.RoleRepository;
+import com.example.backend.dao.UserRepository;
+import com.example.backend.dto.UserDto;
+import com.example.backend.dto.UserRegistrationDTO;
+import com.example.backend.entities.Roles;
+import com.example.backend.entities.User;
+import com.example.backend.exception.ExistsEmailException;
+import com.example.backend.exception.HandleMethodArgumentNotValid;
+import com.example.backend.exception.ResourceNotFoundException;
+import com.example.backend.mapper.UserDTOMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Optional;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.stream.Collectors;
 
 
@@ -33,8 +33,6 @@ public class UserService {
     private final RoleRepository roleRepository;
 
     private final UserDTOMapper userDTOMapper;
-    private Long id;
-    private UserRegistrationDTO userRegistrationRequest;
 
     @Autowired
     public UserService(UserRepository userRepository,
@@ -51,21 +49,25 @@ public class UserService {
 
     /**
      * Save a new user.
+     *
      * @param userRegistrationDTO The user to save.
      * @return The saved user.
      */
-    public User saveUserWithRoles(UserRegistrationDTO userRegistrationDTO) {
+
+
+    public UserDto saveUserWithRoles(UserRegistrationDTO userRegistrationDTO) {
 // Validate the UserDto (e.g., check for required fields)
         validateUserDto(userRegistrationDTO);
 
 //        check if email already exists
         existsByEmail(userRegistrationDTO.getEmail());
 
-
         User user = new User();
         user.setName(userRegistrationDTO.getName());
         user.setEmail(userRegistrationDTO.getEmail());
         user.setPassword(passwordEncoder.encode(userRegistrationDTO.getPassword()));
+        user.setCreatedAt(LocalDateTime.now());
+
 
         if (userRegistrationDTO.getRoles() == null) {
             userRegistrationDTO.setRoles(List.of("USER"));
@@ -73,14 +75,15 @@ public class UserService {
 
         var roles = userRegistrationDTO.getRoles();
         roles.forEach(roleName -> {
-            Role role = new Role();
+            Roles role = new Roles();
             role.setName(roleName);
             role.setUser(user);
+            roleRepository.save(role);
             user.addRole(role);
         });
 
-        return userRepository.save(user);
-
+        User savedUser = userRepository.save(user);
+       return  userDTOMapper.apply(savedUser);
     }
 
 
@@ -89,8 +92,8 @@ public class UserService {
      * @return A list of all users.
      */
     public List<UserDto> getAllUsers() {
-        return userRepository.findAll()
-                .stream()
+
+        return userRepository.findAll().stream()
                 .map(userDTOMapper)
                 .collect(Collectors.toList());
 
@@ -103,7 +106,7 @@ public class UserService {
      * @throws ResourceNotFoundException if the user is not found.
      */
 
-    public UserDto getUserById(int id) {
+    public UserDto getUserById(UUID id) {
         Optional<User> user = userRepository.findById(id);
         if (user.isPresent()) {
             return userDTOMapper.apply(user.get());
@@ -115,15 +118,14 @@ public class UserService {
 
     /**
      * Check if the specified email address already exists.
+     *
      * @param email The email address to check.
-     * @return true if the email address already exists, otherwise false.
      */
-    public boolean existsByEmail(String email) {
+    public void existsByEmail(String email) {
     userRepository.getByEmail(email)
                 .ifPresent(user -> {
                     throw new ExistsEmailException("Email already exists");
                 });
-        return false;
     }
 
     /**
@@ -131,7 +133,7 @@ public class UserService {
      * @param user The UserDto to validate.
      * @throws HandleMethodArgumentNotValid if the UserDto is invalid.
       */
-    private void validateUserDto(@Valid UserRegistrationDTO user) {
+    private void validateUserDto( UserRegistrationDTO user) {
         if (user.getName() == null || user.getName().isEmpty()) {
             throw new HandleMethodArgumentNotValid("Name is required");
         }
@@ -144,6 +146,21 @@ public class UserService {
 
     }
 
+    public User getUser() {
+        return (User) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+    }
+
+    public User getUserByEmail(String token) {
+        return userRepository.getByEmail(token)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException("User not found with email: " + token));
+    }
+
+    public void deleteUser(UUID id) {
+        User user = userRepository.findById(id)
+             .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + id));
+        userRepository.delete(user);
+    }
 
 
     /**
@@ -155,47 +172,47 @@ public class UserService {
      * @throws ExistsEmailException if the email already exists.
      *
      */
-    public UserDto updateUser (Long id, UserRegistrationDTO userRegistrationRequest) {
-        User user = userRepository.findById(Math.toIntExact(id))
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + id));
-        
-            boolean updated = false;
-
-            if (userRegistrationRequest.getName() != null && !userRegistrationRequest.getName().equals(user.getName())) {
-                user.setName(userRegistrationRequest.getName());
-                updated = true;
-            }
-            // Check if a new password is provided
-            if (userRegistrationRequest.getPassword() != null && !userRegistrationRequest.getPassword().isEmpty()) {
-//                updatePassword(user.getEmail(), userRegistrationRequest.getPassword());
-                user.setPassword(passwordEncoder.encode(userRegistrationRequest.getPassword()));
-                updated = true;
-            }
-
-            // Check if a new role is provided
-            if (userRegistrationRequest.getRoles() != null && !userRegistrationRequest.getRoles().isEmpty()) {
-                user.setRoles(userRegistrationRequest.getRoles().stream().map(Role::new).collect(Collectors.toList()));
-                updated = true;
-            }
-
-            // Check if a new email is provided
-            if (userRegistrationRequest.getEmail() != null && !userRegistrationRequest.getEmail().equals(user.getEmail())) {
-                existsByEmail(userRegistrationRequest.getEmail());
-                user.setEmail(userRegistrationRequest.getEmail());
-                updated = true;
-            }else if(userRegistrationRequest.getEmail().equals(user.getEmail())){
-                updated = true;
-            }
-            if (!updated) {
-                throw new ExistsEmailException("No changes were made");
-            }
-
-
-          User userUpdate =  userRepository.save(user);
-        System.out.println(userUpdate);
-          return userDTOMapper.apply(userUpdate);
-
-    }
+//    public UserDto updateUser (Long id, UserRegistrationDTO userRegistrationRequest) {
+//        User user = userRepository.findById(id)
+//                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + id));
+//
+//            boolean updated = false;
+//
+//            if (userRegistrationRequest.getName() != null && !userRegistrationRequest.getName().equals(user.getName())) {
+//                user.setName(userRegistrationRequest.getName());
+//                updated = true;
+//            }
+//            // Check if a new password is provided
+//            if (userRegistrationRequest.getPassword() != null && !userRegistrationRequest.getPassword().isEmpty()) {
+////                updatePassword(user.getEmail(), userRegistrationRequest.getPassword());
+//                user.setPassword(passwordEncoder.encode(userRegistrationRequest.getPassword()));
+//                updated = true;
+//            }
+//
+//            // Check if a new role is provided
+////            if (userRegistrationRequest.getRoles() != null && !userRegistrationRequest.getRoles().isEmpty()) {
+////                user.setRole(userRegistrationRequest.getRoles().stream().map(Roles::new).collect(Collectors.toList()));
+////                updated = true;
+////            }
+//
+//            // Check if a new email is provided
+//            if (userRegistrationRequest.getEmail() != null && !userRegistrationRequest.getEmail().equals(user.getEmail())) {
+//                existsByEmail(userRegistrationRequest.getEmail());
+//                user.setEmail(userRegistrationRequest.getEmail());
+//                updated = true;
+//            }else if(userRegistrationRequest.getEmail().equals(user.getEmail())){
+//                updated = true;
+//            }
+//            if (!updated) {
+//                throw new ExistsEmailException("No changes were made");
+//            }
+//
+//
+//          User userUpdate =  userRepository.save(user);
+//        System.out.println(userUpdate);
+//          return userDTOMapper.apply(userUpdate);
+//
+//    }
 
     /**
      * Delete the user with the specified ID.
@@ -203,16 +220,16 @@ public class UserService {
      * @return The deleted user.
      * @throws ResourceNotFoundException if the user is not found.
      */
-    public Optional<User> deleteUser(int id) {
-        Optional<User> optionalUser = userRepository.findById(id);
-        if (optionalUser.isPresent()) {
-            userRepository.deleteById(id);
-            return optionalUser;
-        } else {
-            // Handle the case where the user with the specified ID is not found
-            throw new HandleMethodArgumentNotValid("User not found with ID: " + id);
-        }
-    }
+//    public Optional<User> deleteUser(Long id) {
+//        Optional<User> optionalUser = userRepository.findById(id);
+//        if (optionalUser.isPresent()) {
+//            userRepository.deleteById(id);
+//            return optionalUser;
+//        } else {
+//            // Handle the case where the user with the specified ID is not found
+//            throw new HandleMethodArgumentNotValid("User not found with ID: " + id);
+//        }
+//    }
 
 
 }

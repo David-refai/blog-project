@@ -1,25 +1,30 @@
 package com.example.backend.entities;
 
+import com.example.backend.dto.UserDto;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
-import jakarta.transaction.Transactional;
 import lombok.*;
 import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.proxy.HibernateProxy;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 
-
-@Data
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@EqualsAndHashCode(exclude = {"comments", "likes"})
-@ToString(exclude = {"comments", "likes"})
-@Transactional
+@ToString(exclude = {"comments", "likes", "author"})
 @Entity
-@Table(name = "posts")
+@Table(name = "post")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Posts {
 
     @Id
@@ -34,19 +39,55 @@ public class Posts {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
-    @Column(name = "image", columnDefinition = "TEXT")
-    private LocalDate date;
+    @Column(name = "createAt", columnDefinition = "DATE")
+    private LocalDateTime createdAt;
 
 //    one user can have multiple posts
-@ManyToOne
+@ManyToOne(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+@JsonIgnore
 @JoinColumn(name = "user_id")
 private User author;
 
-    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
-    @JoinColumn(name = "post_id", referencedColumnName = "id")
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JsonManagedReference // This annotation is used on the "owning" side of the relationship
     private List<Comments> comments;
+
 
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL)
     private List<Likes> likes;
 
-}
+
+    public Posts(String number, String wer, LocalDateTime now) {
+        this.title = number;
+        this.content = wer;
+        this.createdAt = now;
+
+    }
+
+    public Posts(UUID id, String title, String content
+//                 LocalDateTime createdAt
+    ) {
+        this.id = id;
+        this.title = title;
+        this.content = content;
+//        this.createdAt = createdAt;
+    }
+
+
+
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null) return false;
+        Class<?> oEffectiveClass = o instanceof HibernateProxy ? ((HibernateProxy) o).getHibernateLazyInitializer().getPersistentClass() : o.getClass();
+        Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass() : this.getClass();
+        if (thisEffectiveClass != oEffectiveClass) return false;
+        Posts posts = (Posts) o;
+        return getId() != null && Objects.equals(getId(), posts.getId());
+    }
+
+    @Override
+    public final int hashCode() {
+        return this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
+    }
+}  // class ends

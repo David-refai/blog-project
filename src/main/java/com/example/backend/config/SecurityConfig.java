@@ -14,6 +14,8 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -96,12 +98,14 @@ public class SecurityConfig {
 
 
         http
-                .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .ignoringRequestMatchers("/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/register")
-
-
-                )
+                .csrf(AbstractHttpConfigurer::disable)
+//                .cors(AbstractHttpConfigurer::disable)
+//                .csrf(csrf -> csrf
+//                        .csrfTokenRepository().disable()
+//                        .ignoringRequestMatchers("/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/register")
+//
+//
+//                )
                 .cors(cors -> cors
                         .configurationSource(request -> {
                             var corsConfiguration = new CorsConfiguration();
@@ -109,14 +113,21 @@ public class SecurityConfig {
                             corsConfiguration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE"));
                             corsConfiguration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type"));
                             return corsConfiguration;
-                        })
-                )
+                        }))
                 .authorizeHttpRequests(configure -> configure
 
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "\"/api/v1/auth/logout").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login",
+                                "/api/v1/auth/logout").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/posts/create-post").hasAnyAuthority("ROLE_ADMIN", "ROLE_USER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/posts/all", "/api/v1/posts/{id}").permitAll()
+                        .requestMatchers(HttpMethod.GET,"/api/v1/users/all").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/comments/create-comment/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/comments/delete-comment/{id}")
+                        .hasAnyAuthority("ROLE_ADMIN", "ROLE_MODERATOR")
+
                         .anyRequest().authenticated()
                 )
-                .oauth2Client(withDefaults())
+//                .oauth2Client(withDefaults())
                 .sessionManagement(sessionManagement -> sessionManagement
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider(customUserDetailsService, passwordEncoder()))
@@ -124,14 +135,18 @@ public class SecurityConfig {
                 .exceptionHandling(exceptionHandling -> exceptionHandling.authenticationEntryPoint(authenticationEntryPoint())
                 )
 
-                .httpBasic(withDefaults());
-//                .formLogin(withDefaults())
+                .httpBasic(withDefaults())
+                .formLogin(withDefaults());
 //                .logout(logout -> logout.logoutSuccessUrl("/"))
 //                .rememberMe(AbstractHttpConfigurer::disable)
 //                .headers(headers -> headers
 //                        .contentSecurityPolicy(csp -> csp
 //                                .policyDirectives("default-src 'self'"))
 //                        .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
+//                        .httpStrictTransportSecurity(HeadersConfigurer.HstsConfig::disable)
+//                );
+//                .headers(headers -> headers
+//                        // Other configurations...
 //                        .httpStrictTransportSecurity(HeadersConfigurer.HstsConfig::disable)
 //                );
 

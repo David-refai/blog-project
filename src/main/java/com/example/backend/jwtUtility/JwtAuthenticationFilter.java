@@ -15,11 +15,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-/**
- * Filter class for filtering requests and responses.
- * @see OncePerRequestFilter
- * @see JwtUtil
- */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -46,9 +41,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
             token = authorizationHeader.substring(7);
             email = jwtUtil.getSubject(token);
-            System.out.println("email: " + email);
-            System.out.println("token: " + token);
-            System.out.println("authorizationHeader: " + authorizationHeader);
 
 
 //       if the user is already authenticated, we can skip the authentication process
@@ -63,6 +55,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                             userDetails, null, userDetails.getAuthorities()
                     );
+
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                     SecurityContextHolder.getContext().setAuthentication(authentication);

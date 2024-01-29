@@ -1,57 +1,48 @@
 package com.example.backend.entities;
 
 
+import com.example.backend.dto.UserDto;
+import com.example.backend.mapper.UserDTOMapper;
+import com.fasterxml.jackson.annotation.*;
 import jakarta.persistence.*;
-import jakarta.transaction.Transactional;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import lombok.*;
-import org.hibernate.annotations.GenericGenerator;
-import org.hibernate.validator.constraints.Range;
+import org.hibernate.proxy.HibernateProxy;
+import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
-import java.time.LocalDate;
-import java.util.Collection;
-import java.util.List;
-import java.util.UUID;
 
-@Data
+import java.time.LocalDateTime;
+import java.util.*;
+
+//import jakarta.validation.constraints.Email;
+//import org.hibernate.annotations.GenericGenerator;
+//import org.hibernate.validator.constraints.Range;
+
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@EqualsAndHashCode(exclude = {"posts", "comments", "likes"})
-@ToString(exclude = {"posts", "comments", "likes"})
-@Transactional
+@ToString(exclude = {"likes", "posts", "comments"})
 @Builder
 @Entity
 @Table(name = "user")
+@JsonIgnoreProperties({"hibernateLazyInitializer",
+        "handler"})
 public class User implements UserDetails {
 
     @Id
-    @GeneratedValue(generator = "uuid2")
-    @GenericGenerator(name = "uuid2", strategy = "uuid2")
-    @Column(name = "id", columnDefinition = "BINARY(16)")
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
 
     @Column(name = "name")
     private String name;
 
-    @NotNull.List({
-        @NotNull(message = "Email cannot be null"),
-        @NotNull(message = "Email cannot be empty")
-    })
-    @Email(message = "Email should be valid")
-    @Pattern(regexp = "^[a-zA-Z0-9+_.-]+@[a-zA-Z0-9.-]+$", message = "Email should be valid")
     @Column(name = "email", unique = true)
     private String email;
 
-//    validate password
-    @NotNull.List({
-        @NotNull(message = "Password cannot be null"),
-        @NotNull(message = "Password cannot be empty")
-    })
-    @Range(min = 3, max = 16, message = "Password must be between 8 and 20 characters")
-//    @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).*$", message = "Password must contain at least one uppercase letter, one lowercase letter and one number")
+
     @Column(name = "password")
     private String password;
 
@@ -59,18 +50,24 @@ public class User implements UserDetails {
     private String image;
 
     @Column(name = "date" , columnDefinition = "DATE")
-    private LocalDate date;
+    private @LastModifiedDate LocalDateTime createdAt;
 
-    @Column(name = "role")
-    private String role;
+    // One person can have multiple roles
+    @JsonManagedReference
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL , fetch = FetchType.EAGER)
+    private List<Roles> roles;
 
     // One person can have multiple posts
-    @OneToMany(mappedBy = "user")
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "author", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Posts> posts;
 
     // One person can write multiple comments
-    @OneToMany(mappedBy = "user")
-    private List<Comments> comments;
+    @ManyToOne(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @JoinColumn(name = "user_id")
+    @JsonProperty("user_id")
+    private User user;
 
     // One person can like multiple posts
     @OneToMany(mappedBy = "user")
@@ -78,7 +75,12 @@ public class User implements UserDetails {
 
         @Override
         public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(() -> role);
+            List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+            for (Roles role : roles) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_" + role.getName()));
+            }
+            return authorities;
+//            return roles.stream().toList();
         }
 
         @Override
@@ -106,5 +108,37 @@ public class User implements UserDetails {
             return true;
         }
 
+
+
+    public void addRole(Roles authority) {
+        if (roles == null) {
+            roles = new ArrayList<>();
+        }
+        roles.add(authority);
+        authority.setUser(this);
+
+
+
+    }
+
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null) return false;
+        Class<?> oEffectiveClass = o instanceof HibernateProxy ? ((HibernateProxy) o).getHibernateLazyInitializer().getPersistentClass() : o.getClass();
+        Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass() : this.getClass();
+        if (thisEffectiveClass != oEffectiveClass) return false;
+        User user = (User) o;
+        return false;
+    }
+
+    @Override
+    public final int hashCode() {
+        return this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
+    }
+
+    public UserDto map(UserDTOMapper userDTOMapper) throws InstantiationException, IllegalAccessException {
+            return userDTOMapper.apply(this);
+    }
 }
 
